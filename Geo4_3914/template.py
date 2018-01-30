@@ -14,7 +14,7 @@ import arcpy
 import os
 import numpy
 
-
+#--------------
 class OSMLoad():
   ''' For getting and storing OSM data as .shp (for a given key value pair/element type)'''
 
@@ -42,7 +42,7 @@ class OSMLoad():
     #print getCurentBBinWGS84()
 
 
-  """Turns an OSM element (from a result set) into an arcpy geometry"""
+  """Turns an OSM element (from a result set) into an arcpy geometry, depending on loaded geometry type"""
   def createGeometry(self, element):
     if (self.elem == "node"):
          geom = arcpy.PointGeometry(arcpy.Point(float(element.lon), float(element.lat)),arcpy.SpatialReference(4326)).projectAs(self.rs)
@@ -58,8 +58,8 @@ class OSMLoad():
          geom = arcpy.Polyline(array,arcpy.SpatialReference(4326)).projectAs(self.rs)
     return geom
 
-  """Turns the loaded OSM results into a shape file at "outFC", depending on geometry type"""
-  def OSMtoShape(self, outFC):
+  """Turns the loaded OSM results into a shape file located at "outFC", depending on the loaded geometry type"""
+  def toShape(self, outFC):
          # Create the output feature class in WGS84
         #outFC = os.path.join(arcpy.env.workspace,arcpy.ValidateTableName("OSM"))
         if self.elem == "node":
@@ -71,14 +71,13 @@ class OSMLoad():
         elif self.elem == "line":
             fc = 'POLYLINE'
             res = self.result.ways
-
+        #This genereates the output feature class
         arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), fc, '', '', '', self.rs)
 
-        # Join fields to the feature class, using ExtendTable
-
-
+        # Join fields to the feature class, using ExtendTable, depending on the OSM tags that came with the loaded results
         tag_list = (list(self.tag_set))
         print tag_list
+        #This makes sure the tag names are converted into valid fieldnames (of length 10 max)
         tag_fields = map(lambda s: (((str(arcpy.ValidateFieldName(s))))[0:4]+((str(arcpy.ValidateFieldName(s))))[-5:] if len(str(arcpy.ValidateFieldName(s)))>10 else (str(arcpy.ValidateFieldName(s)))).upper(), tag_list)
         print tag_fields
 
@@ -90,8 +89,6 @@ class OSMLoad():
         for f in tag_fields:
             field_array.append((f, '|S255'))
 
-##        for f in field_array:
-##            arcpy.AddField_management(outFC,f[0], f[1])
         #print field_array
         inarray = numpy.array([],
                           numpy.dtype(field_array))
@@ -120,24 +117,25 @@ class OSMLoad():
             del rowsDA
 
 
-  def getOSMfeatures(self, OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}):
+  def getOSM(self, overpassexpr):
+
+        #Extracts the syntax elements of the overpass expression (element, key and value)
+        OSMelem =  (overpassexpr.split('(')[0]).strip()
+        kv = ((overpass.split('[')[1]).split(']')[0]).strip()
+        key = (kv.split('=')[0]).strip()
+        value = (kv.split('=')[1]).strip()
         api = overpy.Overpass()
-
-        bbox = ", ".join(str(e) for e in self.getCurrentBBinWGS84())#"50.600, 7.100, 50.748, 7.157"
-
-        if (keyvalue["value"] == None): #If querying only by key
-            kv = keyvalue["key"]
-        else:
-            kv = keyvalue["key"]+"="+keyvalue["value"]
-
         #Using Overpass API: http://wiki.openstreetmap.org/wiki/Overpass_API
-        result = api.query(OSMelem+"""("""+bbox+""") ["""+kv+"""];out body;
-            """)
+        result = api.query(overpassexpr)
+
+
         results = []
         if (OSMelem == "node"):
             results = result.nodes
         elif (OSMelem == "area" or OSMelem == "line"):
             results = result.ways
+        else:
+            raise ValueError("OSM element missing (Syntax) for getting data!!")
 
         print("Number of results:" + str(len(results)))
         self.max_field_length = 0
@@ -154,15 +152,32 @@ class OSMLoad():
 
         self.result = result
         self.elem = OSMelem
-        self.value = keyvalue["value"]
-        self.key = keyvalue["key"]
+        self.value = value
+        self.key = key
+#------------end of load object------------------------
+
+
+
+def constructOverpassEx(OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}):
+    overpassexpr = ''
+
+    bbox = ", ".join(str(e) for e in self.getCurrentBBinWGS84())#"50.600, 7.100, 50.748, 7.157"
+
+    if (keyvalue["value"] == None): #If querying only by key
+            kv = keyvalue["key"]
+    else:
+            kv = keyvalue["key"]+"="+keyvalue["value"]
+
+    overpassexpr = OSMelem+"""("""+bbox+""") ["""+kv+"""];out body;  """
+    return overpassexpr
+
 
 
 def main():
     tname = r"C:\Temp\result.shp"
     o = OSMLoad()
-    o.getOSMfeatures()
-    o.OSMtoShape(tname)
+    o.getOSM(constructOverpassEx())
+    o.toShape(tname)
 
 if __name__ == '__main__':
     main()
