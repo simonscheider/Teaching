@@ -25,41 +25,27 @@ class OSMLoad():
   tag_set = set()# this is the list of tags that come with the result set
   max_field_length = 0
   result = '' #This the result object
-  rs = '' #This the reference system object of the current mapview
 
 
 
-    # Gets the extent of the current map view in WGS84
-  def getCurrentBBinWGS84(self):
-        cmapdoc = arcpy.mapping.MapDocument("CURRENT")
-        cdf = arcpy.mapping.ListDataFrames(cmapdoc, "Layers")[0]
-        extentPolygon = arcpy.Polygon(arcpy.Array([cdf.extent.lowerLeft,cdf.extent.lowerRight, cdf.extent.upperRight, cdf.extent.upperLeft]), cdf.spatialReference)
-        self.rs = cdf.spatialReference
-        extentPolygoninWGS84 = extentPolygon.projectAs("WGS 1984") #arcpy.SpatialReference(4326)
-        ex = extentPolygoninWGS84.extent
-        return [ex.YMin,ex.XMin,ex.YMax,ex.XMax]
-        del cmapdoc
-    #print getCurentBBinWGS84()
-
-
-  """Turns an OSM element (from a result set) into an arcpy geometry, depending on loaded geometry type"""
-  def createGeometry(self, element):
+  """Turns an OSM element (from a result set) into an arcpy geometry, depending on loaded geometry type and a target reference system (rs)"""
+  def createGeometry(self, element, rs):
     if (self.elem == "node"):
-         geom = arcpy.PointGeometry(arcpy.Point(float(element.lon), float(element.lat)),arcpy.SpatialReference(4326)).projectAs(self.rs)
+         geom = arcpy.PointGeometry(arcpy.Point(float(element.lon), float(element.lat)),arcpy.SpatialReference(4326)).projectAs(rs)
     elif (self.elem == "area"):
          array = arcpy.Array()
          for n in element.get_nodes(resolve_missing=True):
             array.add(arcpy.Point(float(n.lon), float(n.lat)))
-         geom = arcpy.Polygon(array,arcpy.SpatialReference(4326)).projectAs(self.rs)
+         geom = arcpy.Polygon(array,arcpy.SpatialReference(4326)).projectAs(rs)
     elif (self.elem == "line"):
          array = arcpy.Array()
          for n in element.get_nodes(resolve_missing=True):
             array.add(arcpy.Point(float(n.lon), float(n.lat)))
-         geom = arcpy.Polyline(array,arcpy.SpatialReference(4326)).projectAs(self.rs)
+         geom = arcpy.Polyline(array,arcpy.SpatialReference(4326)).projectAs(rs)
     return geom
 
-  """Turns the loaded OSM results into a shape file located at "outFC", depending on the loaded geometry type"""
-  def toShape(self, outFC):
+  """Turns the loaded OSM results into a shape file located at "outFC", depending on the loaded geometry type (element) and a target reference system (rs)"""
+  def toShape(self, outFC, rs):
          # Create the output feature class in WGS84
         #outFC = os.path.join(arcpy.env.workspace,arcpy.ValidateTableName("OSM"))
         if self.elem == "node":
@@ -72,7 +58,7 @@ class OSMLoad():
             fc = 'POLYLINE'
             res = self.result.ways
         #This genereates the output feature class
-        arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), fc, '', '', '', self.rs)
+        arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), fc, '', '', '', rs)
 
         # Join fields to the feature class, using ExtendTable, depending on the OSM tags that came with the loaded results
         tag_list = (list(self.tag_set))
@@ -103,7 +89,7 @@ class OSMLoad():
 
         #Geometries and attributes are inserted
         for element in res:
-            geom = self.createGeometry(element)
+            geom = self.createGeometry(element, rs)
             f = lambda tag: element.tags.get(tag, "n/a")
             tag_values = map(f,tag_list)
             #print tag_values
@@ -120,8 +106,9 @@ class OSMLoad():
   def getOSM(self, overpassexpr):
 
         #Extracts the syntax elements of the overpass expression (element, key and value)
+        print 'get OSM data for: '  + overpassexpr
         OSMelem =  (overpassexpr.split('(')[0]).strip()
-        kv = ((overpass.split('[')[1]).split(']')[0]).strip()
+        kv = ((overpassexpr.split('[')[1]).split(']')[0]).strip()
         key = (kv.split('=')[0]).strip()
         value = (kv.split('=')[1]).strip()
         api = overpy.Overpass()
@@ -158,11 +145,10 @@ class OSMLoad():
 
 
 
-def constructOverpassEx(OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}):
+def constructOverpassEx(bbox, OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}):
     overpassexpr = ''
 
-    bbox = ", ".join(str(e) for e in self.getCurrentBBinWGS84())#"50.600, 7.100, 50.748, 7.157"
-
+    #bbox = ", ".join(str(e) for e in BBcoordinates) "50.600, 7.100, 50.748, 7.157"
     if (keyvalue["value"] == None): #If querying only by key
             kv = keyvalue["key"]
     else:
@@ -172,12 +158,28 @@ def constructOverpassEx(OSMelem = "node", keyvalue = {'key':"amenity", 'value' :
     return overpassexpr
 
 
+    # Gets the extent of the current map view in WGS84   and the original reference system
+def getBBinWGS84():
+        cmapdoc = arcpy.mapping.MapDocument("CURRENT")
+        cdf = arcpy.mapping.ListDataFrames(cmapdoc, "Layers")[0]
+        extentPolygon = arcpy.Polygon(arcpy.Array([cdf.extent.lowerLeft,cdf.extent.lowerRight, cdf.extent.upperRight, cdf.extent.upperLeft]), cdf.spatialReference)
+        rs = cdf.spatialReference
+        extentPolygoninWGS84 = extentPolygon.projectAs("WGS 1984") #arcpy.SpatialReference(4326)
+        ex = extentPolygoninWGS84.extent
+        bbox = ", ".join(str(e) for e in [ex.YMin,ex.XMin,ex.YMax,ex.XMax])
+        return (bbox, rs)
+        del cmapdoc
+    #print getCurentBBinWGS84()
+
 
 def main():
     tname = r"C:\Temp\result.shp"
+    b = getCurrentBBinWGS84()
+    bb = b[0]
+    rs = b[1]
     o = OSMLoad()
-    o.getOSM(constructOverpassEx())
-    o.toShape(tname)
+    o.getOSM(constructOverpassEx(bb))
+    o.toShape(tname, rs)
 
 if __name__ == '__main__':
     main()
