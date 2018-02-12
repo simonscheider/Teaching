@@ -180,21 +180,71 @@ def getBBfromdata(gemname="Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem
             ext = row[1].extent.projectAs("WGS 1984")
             bbox = ", ".join(str(e) for e in [ext.YMin,ext.XMin,ext.YMax,ext.XMax])
             print ("Getting data for "+gemname)
-            return (bbox, rs)
+            return (bbox, rs, ext)
             break
+
+
+def distanceRaster(shapefile):
+    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
+    # The following inputs are layers or table views: "result"
+    out = os.path.join(os.path.dirname(shapefile), 'distrast')
+    return arcpy.gp.EucDistance_sa(shapefile, out, "", "50", "")
+
+def densityRaster(shapefile):
+    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
+    # The following inputs are layers or table views: "result"
+    out = os.path.join(os.path.dirname(shapefile), 'densrast')
+    return arcpy.gp.PointDensity_sa(shapefile, "NONE", out, "50", "Circle 1000 MAP", "SQUARE_KILOMETERS")
+
+
+def getBurten(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Utrecht.shp'):
+    out = os.path.join(os.path.dirname(within), 'buurtenUtrecht.shp')
+    arcpy.MakeFeatureLayer_management(buurtfile, 'buurtenl')
+    arcpy.SelectLayerByLocation_management('buurtenl', 'WITHIN', within)
+    arcpy.CopyFeatures_management('buurtenl', out)
+    return out
+
+
+def aggRasterinBuurt(raster, buurt = "buurtenUtrecht.shp"):
+    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
+    # The following inputs are layers or table views: "buurt_2017", "densrast"
+    out = os.path.join(os.path.dirname(buurt), 'densitybuurt')
+    table = arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
+
+
+
+def densityBuurt(shapefile):
+    pass
+
+
 
 
 
 def main():
     arcpy.env.overwriteOutput = True
-    tname = r"C:\Temp\MTGIS\result.shp"
+    arcpy.env.workspace = r"C:\Temp\MTGIS"
+    if arcpy.CheckExtension("Spatial") == "Available":
+        arcpy.CheckOutExtension("Spatial")
+
+    tname = os.path.join(arcpy.env.workspace,r"result.shp")
     #b = getCurrentBBinWGS84()
-    b =getBBfromdata(gemname="Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    b =getBBfromdata(gemname="Utrecht", filen=r"Utrecht.shp", fieldname = "GM_NAAM")
     bb = b[0]
     rs = b[1]
+    ext = b[2]
     o = OSMLoad()
     o.getOSM(constructOverpassEx(bb))
     o.toShape(tname, rs)
+
+
+
+    arcpy.env.extent = ext
+    distraster = distanceRaster(tname)
+    densraster = densityRaster(tname)
+    buurt = getBurten(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = 'Utrecht.shp')
+
+    densbuurtab = aggRasterinBuurt(densraster,buurt)
+
 
 if __name__ == '__main__':
     main()
