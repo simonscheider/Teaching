@@ -64,7 +64,8 @@ class OSMLoad():
         tag_list = (list(self.tag_set))
         print tag_list
         #This makes sure the tag names are converted into valid fieldnames (of length 10 max)
-        tag_fields = map(lambda s: (((str(arcpy.ValidateFieldName(s))))[0:4]+((str(arcpy.ValidateFieldName(s))))[-5:] if len(str(arcpy.ValidateFieldName(s)))>10 else (str(arcpy.ValidateFieldName(s)))).upper(), tag_list)
+        valfn = str(arcpy.ValidateFieldName(s))
+        tag_fields = map(lambda s: ((valfn[0:4])+(valfn[-5:]) if len(valfn)>10 else (valfn).upper()), tag_list)
         print tag_fields
 
         field_array = [('intfield', numpy.int32),
@@ -171,10 +172,23 @@ def getBBinWGS84():
         del cmapdoc
     #print getCurentBBinWGS84()
 
+def getBBfromdata(gemname="Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp"):
+     rows = arcpy.da.SearchCursor(filen, ["GM_NAAM","SHAPE@"])
+     rs = arcpy.Describe(filen).spatialReference
+     for row in rows:
+        if row[0] == gemname:
+            ext = row[1].extent.projectAs("WGS 1984")
+            bbox = ", ".join(str(e) for e in [ext.YMin,ext.XMin,ext.YMax,ext.XMax])
+            print bbox
+            return (bbox, rs)
+            break
+
+
 
 def main():
-    tname = r"C:\Temp\result.shp"
-    b = getCurrentBBinWGS84()
+    tname = r"C:\Temp\MTGIS\result.shp"
+    #b = getCurrentBBinWGS84()
+    b =getBBfromdata()
     bb = b[0]
     rs = b[1]
     o = OSMLoad()
