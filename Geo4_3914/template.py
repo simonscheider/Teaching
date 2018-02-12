@@ -63,9 +63,10 @@ class OSMLoad():
         # Join fields to the feature class, using ExtendTable, depending on the OSM tags that came with the loaded results
         tag_list = (list(self.tag_set))
         print tag_list
-        #This makes sure the tag names are converted into valid fieldnames (of length 10 max)
-        valfn = str(arcpy.ValidateFieldName(s))
-        tag_fields = map(lambda s: ((valfn[0:4])+(valfn[-5:]) if len(valfn)>10 else (valfn).upper()), tag_list)
+        ff = (lambda s: (str(arcpy.ValidateFieldName((s[0:4])+(s[-5:]) if len(s) >= 10 else s))).upper())
+        #This makes sure the tag names are converted into valid fieldnames (of length 10 max), where the first and the last 5 characters are taken to build the string
+        tag_fields = map(ff, tag_list)
+
         print tag_fields
 
         field_array = [('intfield', numpy.int32),
@@ -115,7 +116,6 @@ class OSMLoad():
         api = overpy.Overpass()
         #Using Overpass API: http://wiki.openstreetmap.org/wiki/Overpass_API
         result = api.query(overpassexpr)
-
 
         results = []
         if (OSMelem == "node"):
@@ -172,23 +172,24 @@ def getBBinWGS84():
         del cmapdoc
     #print getCurentBBinWGS84()
 
-def getBBfromdata(gemname="Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp"):
-     rows = arcpy.da.SearchCursor(filen, ["GM_NAAM","SHAPE@"])
+def getBBfromdata(gemname="Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM"):
+     rows = arcpy.da.SearchCursor(filen, [fieldname,"SHAPE@"])
      rs = arcpy.Describe(filen).spatialReference
      for row in rows:
         if row[0] == gemname:
             ext = row[1].extent.projectAs("WGS 1984")
             bbox = ", ".join(str(e) for e in [ext.YMin,ext.XMin,ext.YMax,ext.XMax])
-            print bbox
+            print ("Getting data for "+gemname)
             return (bbox, rs)
             break
 
 
 
 def main():
+    arcpy.env.overwriteOutput = True
     tname = r"C:\Temp\MTGIS\result.shp"
     #b = getCurrentBBinWGS84()
-    b =getBBfromdata()
+    b =getBBfromdata(gemname="Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
     bb = b[0]
     rs = b[1]
     o = OSMLoad()
