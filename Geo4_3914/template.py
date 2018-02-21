@@ -34,35 +34,33 @@ class OSMLoad():
 
 
 
-  """Turns an OSM element (from a result set) into an arcpy geometry, depending on loaded geometry type and a target reference system (rs)"""
+  """Turns an OSM element (from a result set) into an arcpy point geometry, depending on OSM element type and a target reference system (rs)"""
   def createGeometry(self, element, rs):
     if (self.elem == "node"):
          geom = arcpy.PointGeometry(arcpy.Point(float(element.lon), float(element.lat)),arcpy.SpatialReference(4326)).projectAs(rs)
-    elif (self.elem == "area"):
-         array = arcpy.Array()
-         for n in element.get_nodes(resolve_missing=True):
-            array.add(arcpy.Point(float(n.lon), float(n.lat)))
-         geom = arcpy.Polygon(array,arcpy.SpatialReference(4326)).projectAs(rs)
-    elif (self.elem == "line"):
-         array = arcpy.Array()
-         for n in element.get_nodes(resolve_missing=True):
-            array.add(arcpy.Point(float(n.lon), float(n.lat)))
-         geom = arcpy.Polyline(array,arcpy.SpatialReference(4326)).projectAs(rs)
+    elif (self.elem == "way"):
+        try:
+            geom = arcpy.PointGeometry(arcpy.Point(float(element.center.lon), float(element.center.lat)),arcpy.SpatialReference(4326)).projectAs(rs)
+        except AttributeError:
+            array = arcpy.Array()
+            for n in element.get_nodes(resolve_missing=True):
+                array.add(arcpy.Point(float(n.lon), float(n.lat)))
+            geom = arcpy.PointGeometry(arcpy.Polygon(array,arcpy.SpatialReference(4326)).projectAs(rs).centroid) #gets the centroid
     return geom
 
-  """Turns the loaded OSM results into a shape file located at "outFC", depending on the loaded geometry type (element) and a target reference system (rs)"""
+  """Turns the loaded OSM results into a point shape file located at "outFC", depending on a target reference system (rs)"""
   def toShape(self, outFC, rs):
          # Create the output feature class in WGS84
         #outFC = os.path.join(arcpy.env.workspace,arcpy.ValidateTableName("OSM"))
         if self.elem == "node":
             fc = 'POINT'
             res = self.result.nodes
-        elif self.elem == "area":
-            fc = 'POLYGON'
+        elif self.elem == "way":
+            fc = 'POINT'
             res = self.result.ways
-        elif self.elem == "line":
-            fc = 'POLYLINE'
-            res = self.result.ways
+##        elif self.elem == "line":
+##            fc = 'POLYLINE'
+##            res = self.result.ways
         #This genereates the output feature class
         arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), fc, '', '', '', rs)
 
@@ -115,7 +113,8 @@ class OSMLoad():
 
         #Extracts the syntax elements of the overpass expression (element, key and value)
         print 'get OSM data for: '  + overpassexpr
-        OSMelem =  (overpassexpr.split('(')[0]).strip()
+        a = ['(','['] #Find the first bracketted expression to get the element name
+        OSMelem =  overpassexpr[0:min(overpassexpr.find(i) for i in a)].strip()
         kv = ((overpassexpr.split('[')[1]).split(']')[0]).strip()
         key = (kv.split('=')[0]).strip()
         value = (kv.split('=')[1]).strip()
@@ -126,7 +125,7 @@ class OSMLoad():
         results = []
         if (OSMelem == "node"):
             results = result.nodes
-        elif (OSMelem == "area" or OSMelem == "line"):
+        elif (OSMelem == "way"):
             results = result.ways
         else:
             raise ValueError("OSM element missing (Syntax) for getting data!!")
@@ -148,7 +147,7 @@ class OSMLoad():
         self.elem = OSMelem
         self.value = value
         self.key = key
-#------------end of load object------------------------
+#------------end of load object-------------------------
 
 
 
@@ -212,13 +211,8 @@ def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Ut
 """This method aggregates a raster into a neighborhood shapefile using a Zonal mean, and stores it as a table"""
 def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
     print ("Aggregate "+raster +" into "+buurt)
-    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
-    # The following inputs are layers or table views: "buurt_2017", "densrast"
-    out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.shp')
+    out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
     ## Here you need to generate a zonal means table over the input raster within the input neighborhoods, and save it as "out"
-    ##
-    ##
-    ##
     return out
 
 

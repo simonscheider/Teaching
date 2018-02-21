@@ -33,35 +33,33 @@ class OSMLoad():
 
 
 
-  """Turns an OSM element (from a result set) into an arcpy geometry, depending on loaded geometry type and a target reference system (rs)"""
+  """Turns an OSM element (from a result set) into an arcpy point geometry, depending on OSM element type and a target reference system (rs)"""
   def createGeometry(self, element, rs):
     if (self.elem == "node"):
          geom = arcpy.PointGeometry(arcpy.Point(float(element.lon), float(element.lat)),arcpy.SpatialReference(4326)).projectAs(rs)
-    elif (self.elem == "area"):
-         array = arcpy.Array()
-         for n in element.get_nodes(resolve_missing=True):
-            array.add(arcpy.Point(float(n.lon), float(n.lat)))
-         geom = arcpy.Polygon(array,arcpy.SpatialReference(4326)).projectAs(rs)
-    elif (self.elem == "line"):
-         array = arcpy.Array()
-         for n in element.get_nodes(resolve_missing=True):
-            array.add(arcpy.Point(float(n.lon), float(n.lat)))
-         geom = arcpy.Polyline(array,arcpy.SpatialReference(4326)).projectAs(rs)
+    elif (self.elem == "way"):
+        try:
+            geom = arcpy.PointGeometry(arcpy.Point(float(element.center.lon), float(element.center.lat)),arcpy.SpatialReference(4326)).projectAs(rs)
+        except AttributeError:
+            array = arcpy.Array()
+            for n in element.get_nodes(resolve_missing=True):
+                array.add(arcpy.Point(float(n.lon), float(n.lat)))
+            geom = arcpy.PointGeometry(arcpy.Polygon(array,arcpy.SpatialReference(4326)).projectAs(rs).centroid) #gets the centroid
     return geom
 
-  """Turns the loaded OSM results into a shape file located at "outFC", depending on the loaded geometry type (element) and a target reference system (rs)"""
+  """Turns the loaded OSM results into a point shape file located at "outFC", depending on a target reference system (rs)"""
   def toShape(self, outFC, rs):
          # Create the output feature class in WGS84
         #outFC = os.path.join(arcpy.env.workspace,arcpy.ValidateTableName("OSM"))
         if self.elem == "node":
             fc = 'POINT'
             res = self.result.nodes
-        elif self.elem == "area":
-            fc = 'POLYGON'
+        elif self.elem == "way":
+            fc = 'POINT'
             res = self.result.ways
-        elif self.elem == "line":
-            fc = 'POLYLINE'
-            res = self.result.ways
+##        elif self.elem == "line":
+##            fc = 'POLYLINE'
+##            res = self.result.ways
         #This genereates the output feature class
         arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), fc, '', '', '', rs)
 
@@ -114,7 +112,8 @@ class OSMLoad():
 
         #Extracts the syntax elements of the overpass expression (element, key and value)
         print 'get OSM data for: '  + overpassexpr
-        OSMelem =  (overpassexpr.split('(')[0]).strip()
+        a = ['(','['] #Find the first bracketted expression to get the element name
+        OSMelem =  overpassexpr[0:min(overpassexpr.find(i) for i in a)].strip()
         kv = ((overpassexpr.split('[')[1]).split(']')[0]).strip()
         key = (kv.split('=')[0]).strip()
         value = (kv.split('=')[1]).strip()
@@ -125,7 +124,7 @@ class OSMLoad():
         results = []
         if (OSMelem == "node"):
             results = result.nodes
-        elif (OSMelem == "area" or OSMelem == "line"):
+        elif (OSMelem == "way"):
             results = result.ways
         else:
             raise ValueError("OSM element missing (Syntax) for getting data!!")
@@ -172,7 +171,7 @@ def getBBfromFile(filen):
     return (bbox, rs, ext)
 
 """This method has a bbox, an OSM element and a key and a value as input and returns an overpass expression"""
-def constructOverpassEx(bbox, OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}):
+def constructOverpassEx(bbox, OSMelem = "way", keyvalue = {'key':"amenity", 'value' : 'school'}):
     overpassexpr = ''
 
     #bbox = ", ".join(str(e) for e in BBcoordinates) "50.600, 7.100, 50.748, 7.157"
@@ -181,14 +180,13 @@ def constructOverpassEx(bbox, OSMelem = "node", keyvalue = {'key':"amenity", 'va
     else:
             kv = keyvalue["key"]+"="+keyvalue["value"]
 
-    overpassexpr = OSMelem+"""("""+bbox+""") ["""+kv+"""];out body;  """
+    overpassexpr = OSMelem+"""("""+bbox+""") ["""+kv+"""];out body center;  """
+
     return overpassexpr
 
 """This method generates a distance raster from a shapefile"""
 def distanceRaster(shapefile):
     print ("Generate distance raster")
-    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
-    # The following inputs are layers or table views: "result"
     out = os.path.join(arcpy.env.workspace, 'distrast')
     arcpy.gp.EucDistance_sa(shapefile, out, "", "50", "")
     return out
@@ -196,8 +194,6 @@ def distanceRaster(shapefile):
 """This method generates a point density raster from a shapefile"""
 def densityRaster(shapefile):
     print ("Generate density raster")
-    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
-    # The following inputs are layers or table views: "result"
     out = os.path.join(arcpy.env.workspace, 'densrast')
     arcpy.gp.PointDensity_sa(shapefile, "NONE", out, "50", "Circle 1000 MAP", "SQUARE_KILOMETERS")
     return out
@@ -214,13 +210,8 @@ def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Ut
 """This method aggregates a raster into a neighborhood shapefile using a Zonal mean, and stores it as a table"""
 def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
     print ("Aggregate "+raster +" into "+buurt)
-    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
-    # The following inputs are layers or table views: "buurt_2017", "densrast"
-    out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.shp')
-    table = arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
-    arcpy.MakeFeatureLayer_management(buurt, 'buurtenl')
-    arcpy.AddJoin_management('buurtenl',"BU_CODE",table,"BU_CODE")
-    arcpy.CopyFeatures_management('buurtenl', arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.shp')
+    out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
+    arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
     return out
 
 
@@ -246,7 +237,7 @@ def main():
 
     #2) Loading data for the municipality from OSM and save it
     o = OSMLoad() #Create object for loading OSM data
-    exp = constructOverpassEx(bb) #Overpass expression from bounding box
+    exp = constructOverpassEx(bb,OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}) #Overpass expression from bounding box
     o.getOSM(exp) #Getting data from OSM
     tname = os.path.join(arcpy.env.workspace,r"result.shp") #Filename for storing results
     o.toShape(tname, rs) #Store results
