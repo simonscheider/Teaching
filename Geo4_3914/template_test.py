@@ -1,9 +1,10 @@
 #-------------------------------------------------------------------------------
-# Name:        Geo4_3914 template (solution)
+# Name:        Geo4_3914 template
 # Purpose:     This template can be used to load and analyse urban infrastructure data from OSM. It is meant for the course
 #               Methods and Techniques Specialisation
 #               BASIC GIS WITH PYTHON AND WEB RESOURCES
 #               at the department for Human Geography and Planning , Utrecht university
+#               This script has methods that are left empty. They need to be filled in by you during the course
 
 #
 # Author:      Simon Scheider
@@ -146,13 +147,14 @@ class OSMLoad():
         self.elem = OSMelem
         self.value = value
         self.key = key
-#------------end of load object------------------------
+#------------end of load object-------------------------
 
 
 
+###Here we start the methods that should be coded by you.  The lines commented like this need to be substituted with Python arcpy code
 
 """This method has a municipality name as input, selects the mun. object in a municipality layer, and stores the single municipality into a shapefile"""
-def getMunicipality(gemname, filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM"):
+def getMunicipality(gemname, filen=r"C:\Temp\MTGIS\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM"):
     print ("Getting data for "+gemname)
     out = os.path.join(arcpy.env.workspace, gemname+'.shp')
     arcpy.MakeFeatureLayer_management(filen, 'municipalities_l')
@@ -172,7 +174,7 @@ def getBBfromFile(filen):
     return (bbox, rs, ext)
 
 """This method has a bbox, an OSM element and a key and a value as input and returns an overpass expression"""
-def constructOverpassEx(bbox, OSMelem = "way", keyvalue = {'key':"amenity", 'value' : 'school'}):
+def constructOverpassEx(bbox, OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}):
     overpassexpr = ''
 
     #bbox = ", ".join(str(e) for e in BBcoordinates) "50.600, 7.100, 50.748, 7.157"
@@ -181,44 +183,43 @@ def constructOverpassEx(bbox, OSMelem = "way", keyvalue = {'key':"amenity", 'val
     else:
             kv = keyvalue["key"]+"="+keyvalue["value"]
 
-    overpassexpr = OSMelem+"""("""+bbox+""") ["""+kv+"""];out body center;  """
-
+    ## Here you need to generate the overpass expression out of its elements
     return overpassexpr
 
 """This method generates a distance raster from a shapefile"""
 def distanceRaster(shapefile):
     print ("Generate distance raster")
     out = os.path.join(arcpy.env.workspace, 'distrast')
-    arcpy.gp.EucDistance_sa(shapefile, out, "", "50", "")
+    ##Here you need to be generate a raster file at the location where "out" is
     return out
 
 """This method generates a point density raster from a shapefile"""
 def densityRaster(shapefile):
     print ("Generate density raster")
     out = os.path.join(arcpy.env.workspace, 'densrast')
-    arcpy.gp.PointDensity_sa(shapefile, "NONE", out, "50", "Circle 1000 MAP", "SQUARE_KILOMETERS")
+    ## Here you need to generate a raster file at the location where "out" is
     return out
 
 """This method generates a shapefile of city neighborhoods that are within a municipality"""
 def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Utrecht.shp'):
     print ("Get city neighorhoods for "+within)
     out = os.path.join(arcpy.env.workspace, 'buurten.shp')
-    arcpy.MakeFeatureLayer_management(buurtfile, 'buurtenSourcel')
-    arcpy.SelectLayerByLocation_management('buurtenSourcel', 'WITHIN', within)
-    arcpy.CopyFeatures_management('buurtenSourcel', out)
+    ## Here you need to generate a shapefile at the location of "out" which contains the neighborhoods within the given municipality ("within")
+    ##
+    ##
     return out
 
 """This method aggregates a raster into a neighborhood shapefile using a Zonal mean, and stores it as a table"""
 def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
     print ("Aggregate "+raster +" into "+buurt)
     out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
-    arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
+    ## Here you need to generate a zonal means table over the input raster within the input neighborhoods, and save it as "out"
     return out
 
 
 
 
-"""This is the procedure that this script is supposed to carry out. Each line is a processing step.
+"""This is the predefined procedure that this script is supposed to carry out. Each line is a processing step, however some cannot be acarried out yet.
 The result are 2 city neighborhood files (tables) that can be mapped and which show the mean density/distance within each neighborhood."""
 def main():
 
@@ -229,16 +230,16 @@ def main():
         arcpy.CheckOutExtension("Spatial")
 
     #1) Getting city municipality file for city outline (bounding box), and setting the processing extent
-    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
     b = getBBfromFile(municipality)
-    bbox = b[0] #Get the bounding box string in WGS 84
-    rs = b[1] #Get the reference system of the original municipality file
-    ext = b[2] #Get the extent object in the original reference system
-    arcpy.env.extent = ext  #Set the geoprocessing extent to the municipality outline in the original reference system
+    bbox = b[0] #Getting the bounding box (string) in WGS 84
+    rs = b[1] #Getting the reference system of the original municipality file
+    ext = b[2] #Getting the extent object in the original reference system
+    arcpy.env.extent = ext  #Setting the geoprocessing extent to the municipality outline in the original reference system
 
     #2) Loading data for the municipality from OSM and save it
     o = OSMLoad() #Create object for loading OSM data
-    exp = constructOverpassEx(bbox,OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}) #Overpass expression from bounding box
+    exp = constructOverpassEx(bbox,OSMelem = "node", keyvalue = {'key':"amenity", 'value' : 'school'}) #Generate overpass expression from bounding box
     o.getOSM(exp) #Getting data from OSM
     tname = os.path.join(arcpy.env.workspace,r"result.shp") #Filename for storing results
     o.toShape(tname, rs) #Store results
@@ -246,7 +247,7 @@ def main():
     #3) Compute analytic rasters and aggregate them into neighborhoods within municipality
     distraster = distanceRaster(tname) #generating distance raster
     densraster = densityRaster(tname) #generating density raster
-    buurt = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality)
+    buurt = getCityNeighborhoods(buurtfile= "wijkenbuurten2014/buurt_2014.shp", within = municipality)
     densbuurt = aggRasterinNeighborhoods(densraster,buurt) #aggregate means into neighborhoods
     distbuurt = aggRasterinNeighborhoods(distraster,buurt)
 
