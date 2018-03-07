@@ -229,7 +229,7 @@ def main():
         arcpy.CheckOutExtension("Spatial")
 
     #1) Getting city municipality file for city outline (bounding box), and setting the processing extent
-    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTGIS\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
     b = getBBfromFile(municipality)
     bbox = b[0] #Get the bounding box string in WGS 84
     rs = b[1] #Get the reference system of the original municipality file
@@ -246,7 +246,7 @@ def main():
     #3) Compute analytic rasters and aggregate them into neighborhoods within municipality
     distraster = distanceRaster(tname) #generating distance raster
     densraster = densityRaster(tname) #generating density raster
-    buurt = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality)
+    buurt = getCityNeighborhoods(buurtfile= "wijkenbuurten2014/buurt_2014.shp", within = municipality)
     densbuurt = aggRasterinNeighborhoods(densraster,buurt) #aggregate means into neighborhoods
     distbuurt = aggRasterinNeighborhoods(distraster,buurt)
 

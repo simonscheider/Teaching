@@ -183,7 +183,7 @@ def constructOverpassEx(bbox, OSMelem = "node", keyvalue = {'key':"amenity", 'va
     else:
             kv = keyvalue["key"]+"="+keyvalue["value"]
 
-    ## Here you need to generate the overpass expression out of its elements
+    overpassexpr = OSMelem+"""("""+bbox+""") ["""+kv+"""];out body center;  """
     return overpassexpr
 
 """This method generates a distance raster from a shapefile"""
