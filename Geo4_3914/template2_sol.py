@@ -20,6 +20,9 @@ from nltk.corpus import stopwords
 from nltk import wordpunct_tokenize
 import placewebscraper
 
+#This is the LDA Python library for topic modeling
+import lda
+
 
 def tryKeys(o, k1):
     try:
@@ -186,6 +189,80 @@ def getBBfromFile(filen):
     return (bbox, rs, ext)
 
 
+def loadJson(jsonfile):
+     with open(jsonfile) as data:
+        return json.load(data)
+
+def writeJson(dictionary, outfile):
+     with open(outfile, 'w') as fp:
+        fp.seek(0)
+        json.dump(dictionary, fp)
+        fp.close()
+
+def tokenize(text, language = 'dutch'):
+    """ Method turns a text into tokens removing stopwords and stemming them."""
+    if language == 'dutch':
+        p_stemmer = DutchStemmer()
+    else:
+        p_stemmer = PorterStemmer()
+
+    text = text.lower()
+    stop = set(stopwords.words(language))
+    tokens = nltk.word_tokenize(text)
+    tokens = [i for i in tokens if i not in string.punctuation and len(i)>=3]
+    tokens = [i for i in tokens if i not in stop]
+    tokens = [i for i in tokens if i.isalpha()]
+    tokens = [p_stemmer.stem(i) for i in tokens]
+    return tokens
+
+
+def getTexts(jsonfile, key):
+    d = loadJson(jsonfile)
+    texts = []
+    for k,v in d.items():
+         texts.append(v[key])
+    return texts
+
+def getTopics(texts):
+    #This is where the texts get turned into a document-term matrix
+    vectorizer = CountVectorizer(min_df = 1, stop_words = stopwords.words(language), analyzer = 'word', tokenizer=tokenize)
+    X = vectorizer.fit_transform(texts)
+    #print(X)
+    #Gets the vocabulary of stemmed words (terms)
+    vocab = vectorizer.get_feature_names()
+    print(vocab)
+    #This computes the LDA model
+    model = lda.LDA(n_topics=18, n_iter=600, random_state=300)
+    model.fit(X)
+    topic_word = model.topic_word_
+    #print("type(topic_word): {}".format(type(topic_word)))
+    print("shape: {}".format(topic_word.shape))
+
+    # get the top 5 words for each topic (by probablity)
+    n = 5
+    c = 0
+    for i, topic_dist in enumerate(topic_word):
+        topic_words = np.array(vocab)[np.argsort(topic_dist)][:-(n+1):-1]
+        print('*Topic {}\n- {}'.format(i, ' '.join(topic_words)))
+        c += 1
+    #return model
+    # apply topic model to new test data set and write topics into feature vector
+    doc_topic_test = model.transform(X)
+    #print(doc_topic_test)
+    i = 0
+    result = []
+    for title, topics in zip(titles, doc_topic_test):
+        title =title.encode('utf-8')
+        print("{} (top topic: {})".format(title, topics.argmax()))
+        f = {}
+        for j,t in enumerate(topics):
+                f['topic '+str(j)]= t
+        result.append(f)
+        i+=1
+    return result
+
+def storeTopics(jsonfile,topics):
+
 
 
 def main():
@@ -196,19 +273,24 @@ def main():
         arcpy.CheckOutExtension("Spatial")
 
     #1) Getting city municipality file for city outline (bounding box), and setting the processing extent
-    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
-    b = getBBfromFile(municipality)
-    bb = b[0] #Get the bounding box string in WGS 84
-    rs = b[1] #Get the reference system of the original municipality file
-    ext = b[2] #Get the extent object in the original reference system
-    arcpy.env.extent = ext  #Set the geoprocessing extent to the municipality outline in the origina
+    #municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    #b = getBBfromFile(municipality)
+    #bb = b[0] #Get the bounding box string in WGS 84
+    #rs = b[1] #Get the reference system of the original municipality file
+    #ext = b[2] #Get the extent object in the original reference system
+    #arcpy.env.extent = ext  #Set the geoprocessing extent to the municipality outline in the origina
 
+
+    #1) Getting Foursquare data as JSON for some municipality
     #jsonfile = getFSPlaces()
+
+    #2) Extracting topics from texts
+
     jsonfile = 'Utrecht, NLfoodfsdata.json'
+    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
     tname = os.path.join(arcpy.env.workspace,r"result.shp")
-    with open(jsonfile) as data:
-        d = json.load(data)
-        json2SHP(d, tname,['cat','rating'],rs)
+    d = loadJson(jsonfile)
+    json2SHP(d, tname,['cat','rating'],rs)
 
 
 
