@@ -13,12 +13,19 @@
 
 
 import arcpy
-import numpy
+import numpy as np
 import os
 import json, requests
+import nltk
+import string
 from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+from nltk.stem.snowball import DutchStemmer
 from nltk import wordpunct_tokenize
 import placewebscraper
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
 
 #This is the LDA Python library for topic modeling
 import lda
@@ -125,7 +132,7 @@ def createGeometry(element, rs):
     geom = arcpy.PointGeometry(arcpy.Point(float(element['lon']), float(element['lat'])),arcpy.SpatialReference(4326)).projectAs(rs)
     return geom
 
-def json2SHP(jsonfile, outFC, keylist, rs):
+def json2SHP(dictionary, outFC, keylist, rs):
      #This genereates the output feature class
         arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), 'POINT', '', '', '', rs)
 
@@ -136,11 +143,19 @@ def json2SHP(jsonfile, outFC, keylist, rs):
         tag_fields = map(ff, keylist)
         print tag_fields
 
+        #Find out data type of attributes by the first instance
+        obj = next(iter(dictionary))
+        f = lambda tag: float(obj.get(tag, "n/a"))
+        types = map(f,keylist)
+
         field_array = [('intfield', numpy.int32),
                         ('Name_d', '|S255')
                         ]
-        for f in tag_fields:
-            field_array.append((f, '|S255'))
+        for idx,f in enumerate(tag_fields):
+            if types[idx]:
+                field_array.append((f, '|S255'))
+            else:
+                field_array.append((f, '|S255'))
 
         #print field_array
         inarray = numpy.array([],
@@ -155,7 +170,7 @@ def json2SHP(jsonfile, outFC, keylist, rs):
         rowsDA = arcpy.da.InsertCursor(outFC, field_list)
 
         #Geometries and attributes are inserted
-        for obj in jsonfile:
+        for obj in dictionary:
             geom = createGeometry(obj, rs)
             f = lambda tag: obj.get(tag, "n/a")
             tag_values = map(f,keylist)
@@ -199,6 +214,23 @@ def writeJson(dictionary, outfile):
         json.dump(dictionary, fp)
         fp.close()
 
+def addJSON(jsonfile,diclist, outjson, ids = None):
+    diclistorigin = loadJson(jsonfile)
+    newdiclist = []
+    for idx, dicnew in  enumerate(diclist):
+        if ids == None:
+            dic = diclistorigin[idx].copy()
+        else:
+            dic = diclistorigin[ids[idx]].copy()
+        dic.update(dicnew)
+        newdiclist.append(dic)
+
+    writeJson(newdiclist,outjson)
+
+
+
+
+
 def tokenize(text, language = 'dutch'):
     """ Method turns a text into tokens removing stopwords and stemming them."""
     if language == 'dutch':
@@ -219,11 +251,15 @@ def tokenize(text, language = 'dutch'):
 def getTexts(jsonfile, key):
     d = loadJson(jsonfile)
     texts = []
-    for k,v in d.items():
-         texts.append(v[key])
-    return texts
+    ids = []
+    for idx,dic in enumerate(d):
+         text = tryKeys(dic, key)
+         if not isinstance(text,Exception):
+            texts.append(dic[key])
+            ids.append(idx)
+    return texts, ids
 
-def getTopics(texts):
+def getTopics(texts, titles,language = 'dutch'):
     #This is where the texts get turned into a document-term matrix
     vectorizer = CountVectorizer(min_df = 1, stop_words = stopwords.words(language), analyzer = 'word', tokenizer=tokenize)
     X = vectorizer.fit_transform(texts)
@@ -252,7 +288,7 @@ def getTopics(texts):
     i = 0
     result = []
     for title, topics in zip(titles, doc_topic_test):
-        title =title.encode('utf-8')
+        title =str(title).encode('utf-8')
         print("{} (top topic: {})".format(title, topics.argmax()))
         f = {}
         for j,t in enumerate(topics):
@@ -261,7 +297,7 @@ def getTopics(texts):
         i+=1
     return result
 
-def storeTopics(jsonfile,topics):
+
 
 
 
@@ -286,11 +322,26 @@ def main():
 
     #2) Extracting topics from texts
 
-    jsonfile = 'Utrecht, NLfoodfsdata.json'
+    jsonfile = os.path.join(arcpy.env.workspace,'Utrecht, NLfoodfsdata.json')
+##    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
+##    tname = os.path.join(arcpy.env.workspace,r"result.shp")
+##    d = loadJson(jsonfile)
+##    json2SHP(d, tname,['cat','rating'],rs)
+    texts,ids = getTexts(jsonfile,'webtext')
+    topics = getTopics(texts,ids)
+##    for id, topic in zip(ids, topics):
+##        print str(id) +' '+ str(topic)
+    outfile = os.path.join(arcpy.env.workspace,'webtexttopics.json')
+    addJSON(jsonfile,topics, outfile, ids)
     rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
-    tname = os.path.join(arcpy.env.workspace,r"result.shp")
-    d = loadJson(jsonfile)
-    json2SHP(d, tname,['cat','rating'],rs)
+
+    tname = os.path.join(arcpy.env.workspace,r"webtopics.shp")
+    d = loadJson(outfile)
+    topicnames = topics[0].keys()
+    keys = ['cat','rating']+ topicnames
+    json2SHP(d, tname,keys,rs)
+
+
 
 
 
