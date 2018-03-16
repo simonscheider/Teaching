@@ -13,7 +13,8 @@
 
 
 import arcpy
-import numpy as np
+import numpy
+import numbers
 import os
 import json, requests
 import nltk
@@ -143,9 +144,9 @@ def json2SHP(dictionary, outFC, keylist, rs):
         tag_fields = map(ff, keylist)
         print tag_fields
 
-        #Find out data type of attributes by the first instance
+        #Find out data type of attributes by the first row
         obj = next(iter(dictionary))
-        f = lambda tag: float(obj.get(tag, "n/a"))
+        f = lambda tag: isinstance(obj.get(tag, 'nan'),numbers.Real) #Tests whether value is a float or not
         types = map(f,keylist)
 
         field_array = [('intfield', numpy.int32),
@@ -153,7 +154,7 @@ def json2SHP(dictionary, outFC, keylist, rs):
                         ]
         for idx,f in enumerate(tag_fields):
             if types[idx]:
-                field_array.append((f, '|S255'))
+                field_array.append((f, numpy.float32))
             else:
                 field_array.append((f, '|S255'))
 
@@ -172,7 +173,8 @@ def json2SHP(dictionary, outFC, keylist, rs):
         #Geometries and attributes are inserted
         for obj in dictionary:
             geom = createGeometry(obj, rs)
-            f = lambda tag: obj.get(tag, "n/a")
+            f = lambda tag: (obj.get(tag, None))
+            #[f(tag) for idx,tag in enumerate(keylist) if types(idx)]
             tag_values = map(f,keylist)
             #print tag_values
             l = [obj.get("Name", "n/a"), geom]
@@ -278,7 +280,7 @@ def getTopics(texts, titles,language = 'dutch'):
     n = 5
     c = 0
     for i, topic_dist in enumerate(topic_word):
-        topic_words = np.array(vocab)[np.argsort(topic_dist)][:-(n+1):-1]
+        topic_words = numpy.array(vocab)[numpy.argsort(topic_dist)][:-(n+1):-1]
         print('*Topic {}\n- {}'.format(i, ' '.join(topic_words)))
         c += 1
     #return model
