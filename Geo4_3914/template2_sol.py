@@ -43,7 +43,7 @@ def tryKeys(o, k1):
 def getFSPlaces(city = 'Utrecht, NL', section='food', limit=50):
     url = 'https://api.foursquare.com/v2/venues/explore'
     out =[]
-    outfile=city+section+'fsdata.json'
+    outfile=os.path.join(arcpy.env.workspace, city+section+'fsdata.json')
     with open(outfile, 'w') as fp:
         params = dict(
           client_id='VD5JRI5HLXSD21ZJUALG0K4BJOAVJNBIUXUNJDSDHERAYSA0',
@@ -235,6 +235,12 @@ def addJSON(jsonfile,diclist, outjson, ids = None):
 
     writeJson(newdiclist,outjson)
 
+def joinJSON(jsonfile1, jsonfile2,outfile):
+    j1 = loadJson(jsonfile1)
+    j2 = loadJson(jsonfile2)
+    writeJson(j1 + j2,outfile)
+    return outfile
+
 
 
 
@@ -306,17 +312,17 @@ def getTopics(texts, titles,language = 'dutch'):
     return result
 
 """This method generates a kernel density raster from a point shapefile"""
-def kdensityRaster(shapefile, populationfield):
+def kdensityRaster(shapefile, mun, populationfield):
     print ("Generate kernel density raster")
-    out = os.path.join(arcpy.env.workspace, 'kdr'+populationfield)
-    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, '',"SQUARE_KILOMETERS")
+    out = os.path.join(arcpy.env.workspace, mun+'kdr'+populationfield)
+    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, 500,"SQUARE_KILOMETERS")
     outKDens.save(out)
     return out
 
 """This method generates a point density raster from a shapefile"""
-def densityRaster(shapefile, populationfield):
+def densityRaster(shapefile, mun, populationfield):
     print ("Generate density raster")
-    out = os.path.join(arcpy.env.workspace, 'dr'+populationfield)
+    out = os.path.join(arcpy.env.workspace, mun+'dr'+populationfield)
     outDens = arcpy.sa.PointDensity(shapefile, populationfield, "50", arcpy.sa.NbrCircle(500, "MAP"), "SQUARE_KILOMETERS")
     outDens.save(out)
     return out
@@ -342,7 +348,7 @@ def getMunicipality(gemname, filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.sh
     """This method generates a shapefile of city neighborhoods that are within a municipality"""
 def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Utrecht.shp'):
     print ("Get city neighorhoods for "+within)
-    out = os.path.join(arcpy.env.workspace, 'buurten.shp')
+    out = os.path.join(arcpy.env.workspace, within.split('.')[0]+'buurten.shp')
     arcpy.MakeFeatureLayer_management(buurtfile, 'buurtenSourcel')
     arcpy.SelectLayerByLocation_management('buurtenSourcel', 'WITHIN', within)
     arcpy.CopyFeatures_management('buurtenSourcel', out)
@@ -363,22 +369,42 @@ def main():
     if arcpy.CheckExtension("Spatial") == "Available": #Check out spatial analyst extension
         arcpy.CheckOutExtension("Spatial")
 
+    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
+
 
     ## 1: Getting data from Foursquare, store it as json and store as shapefile
-  #  jsonfile = getFSPlaces(city = 'Utrecht, NL', section='food', limit=50)
-    jsonfile = os.path.join(arcpy.env.workspace,'Utrecht, NLfoodfsdata.json')
-    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
-    resultshp = os.path.join(arcpy.env.workspace,r"result.shp")
-##    d = loadJson(jsonfile)
-##    json2SHP(d, resultshp,['cat','rating'],rs)
-    arcpy.env.extent =  getExtentfromFile(resultshp)
+    #First municipality
+    municipality1 = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    city1 = 'Utrecht, NL'
+    #jsonfile1 = getFSPlaces(city=city1, section='food', limit=50)
+    jsonfile1 = os.path.join(arcpy.env.workspace,'Utrecht, NLfoodfsdata.json')
+    result1shp = os.path.join(arcpy.env.workspace,r"result1.shp")
+    d = loadJson(jsonfile1)
+    json2SHP(d, result1shp,['cat','rating'],rs)
+
+
+
+
+    #Second municipality
+    municipality2 = getMunicipality("Zwolle", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    city2 = 'Zwolle, NL'
+    #jsonfile2 = getFSPlaces(city=city2, section='food', limit=50)
+    jsonfile2 = os.path.join(arcpy.env.workspace,'Zwolle, NLfoodfsdata.json')
+    result2shp = os.path.join(arcpy.env.workspace,r"result2.shp")
+    d = loadJson(jsonfile2)
+    json2SHP(d, result2shp,['cat','rating'],rs)
+
+
+
 
     ## 2: Generating topics from webtexts, store it as json, and as shapefile
-    texts,ids = getTexts(jsonfile,'webtext')
+    jsonfile = os.path.join(arcpy.env.workspace,'result.json')
+    joinJSON(jsonfile1,jsonfile2,jsonfile)
+    texts,ids = getTexts(jsonfile,'webtext')   #Integrate several municipalieties
     topics = getTopics(texts,ids)
 ##    for id, topic in zip(ids, topics):
 ##        print str(id) +' '+ str(topic)
-    outfile = os.path.join(arcpy.env.workspace,'webtexttopics.json')
+    outfile = os.path.join(arcpy.env.workspace,'webtopics.json')
     addJSON(jsonfile,topics, outfile, ids)
 
     tname = os.path.join(arcpy.env.workspace,r"webtopics.shp")
@@ -387,15 +413,24 @@ def main():
     keys = ['cat','rating']+ topicnames
     json2SHP(d, tname,keys,rs)
 
-    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
-    buurt = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality)
+
     ## 3: Geoprocessing points with topics
+
+    #For 1st municipality
+    arcpy.env.extent =  getExtentfromFile(result1shp)
+    buurt1 = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality1)
     for t in  normalizeFieldList(topicnames):
-        kdensrast = kdensityRaster(tname, t)
-        #denrast = densityRaster(tname, t)
-        densbuurt = aggRasterinNeighborhoods(kdensrast,buurt) #aggregate means into neighborhoods
+        kdensrast = kdensityRaster(tname, 'U',t)
+        #densrast = densityRaster(tname, 'U', t)
+        densbuurt = aggRasterinNeighborhoods(kdensrast,buurt1) #aggregate means into neighborhoods
 
-
+    #For 2nd municipality
+    arcpy.env.extent =  getExtentfromFile(result2shp)
+    buurt2 = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality2)
+    for t in  normalizeFieldList(topicnames):
+        kdensrast = kdensityRaster(tname, 'Z',t)
+        #densrast = densityRaster(tname, 'U', t)
+        densbuurt = aggRasterinNeighborhoods(kdensrast,buurt2) #aggregate means into neighborhoods
 
 
 
