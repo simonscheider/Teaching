@@ -133,16 +133,22 @@ def createGeometry(element, rs):
     geom = arcpy.PointGeometry(arcpy.Point(float(element['lon']), float(element['lat'])),arcpy.SpatialReference(4326)).projectAs(rs)
     return geom
 
-def json2SHP(dictionary, outFC, keylist, rs):
-     #This genereates the output feature class
-        arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), 'POINT', '', '', '', rs)
-
-        # Join fields to the feature class, using ExtendTable, depending on the OSM tags that came with the loaded results
+def normalizeFieldList(keylist):
         print keylist
         ff = (lambda s: (str(arcpy.ValidateFieldName((s[0:4])+(s[-5:]) if len(s) >= 10 else s))).upper())
         #This makes sure the tag names are converted into valid fieldnames (of length 10 max), where the first and the last 5 characters are taken to build the string
         tag_fields = map(ff, keylist)
         print tag_fields
+        return tag_fields
+
+
+def json2SHP(dictionary, outFC, keylist, rs):
+     #This genereates the output feature class
+        arcpy.CreateFeatureclass_management(os.path.dirname(outFC), os.path.basename(outFC), 'POINT', '', '', '', rs)
+
+        # Join fields to the feature class, using ExtendTable, depending on the OSM tags that came with the loaded results
+
+        tag_fields = normalizeFieldList(keylist)
 
         #Find out data type of attributes by the first row
         obj = next(iter(dictionary))
@@ -299,8 +305,55 @@ def getTopics(texts, titles,language = 'dutch'):
         i+=1
     return result
 
+"""This method generates a kernel density raster from a point shapefile"""
+def kdensityRaster(shapefile, populationfield):
+    print ("Generate kernel density raster")
+    out = os.path.join(arcpy.env.workspace, 'kdr'+populationfield)
+    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, '',"SQUARE_KILOMETERS")
+    outKDens.save(out)
+    return out
+
+"""This method generates a point density raster from a shapefile"""
+def densityRaster(shapefile, populationfield):
+    print ("Generate density raster")
+    out = os.path.join(arcpy.env.workspace, 'dr'+populationfield)
+    outDens = arcpy.sa.PointDensity(shapefile, populationfield, "50", arcpy.sa.NbrCircle(500, "MAP"), "SQUARE_KILOMETERS")
+    outDens.save(out)
+    return out
 
 
+    """This method has a (municipality) shapefile as input, then gets its reference system (rs), gets the first geometry's extent, reprojects it to WGS 84, and returns a bbox, the rs and the extent"""
+def getExtentfromFile(filen):
+    print ("Getting BB")
+    ext = arcpy.Describe(filen).extent
+    bbox = ", ".join(str(e) for e in [ext.YMin,ext.XMin,ext.YMax,ext.XMax])
+    print(bbox)
+    return ext
+
+"""This method has a municipality name as input, selects the mun. object in a municipality layer, and stores the single municipality into a shapefile"""
+def getMunicipality(gemname, filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM"):
+    print ("Getting data for "+gemname)
+    out = os.path.join(arcpy.env.workspace, gemname+'.shp')
+    arcpy.MakeFeatureLayer_management(filen, 'municipalities_l')
+    arcpy.SelectLayerByAttribute_management('municipalities_l', where_clause=fieldname+"= '"+gemname+"' ")
+    arcpy.CopyFeatures_management('municipalities_l', out)
+    return out
+
+    """This method generates a shapefile of city neighborhoods that are within a municipality"""
+def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Utrecht.shp'):
+    print ("Get city neighorhoods for "+within)
+    out = os.path.join(arcpy.env.workspace, 'buurten.shp')
+    arcpy.MakeFeatureLayer_management(buurtfile, 'buurtenSourcel')
+    arcpy.SelectLayerByLocation_management('buurtenSourcel', 'WITHIN', within)
+    arcpy.CopyFeatures_management('buurtenSourcel', out)
+    return out
+
+"""This method aggregates a raster into a neighborhood shapefile using a Zonal mean, and stores it as a table"""
+def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
+    print ("Aggregate "+raster +" into "+buurt)
+    out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
+    arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
+    return out
 
 
 def main():
@@ -310,38 +363,43 @@ def main():
     if arcpy.CheckExtension("Spatial") == "Available": #Check out spatial analyst extension
         arcpy.CheckOutExtension("Spatial")
 
-    #1) Getting city municipality file for city outline (bounding box), and setting the processing extent
-    #municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
-    #b = getBBfromFile(municipality)
-    #bb = b[0] #Get the bounding box string in WGS 84
-    #rs = b[1] #Get the reference system of the original municipality file
-    #ext = b[2] #Get the extent object in the original reference system
-    #arcpy.env.extent = ext  #Set the geoprocessing extent to the municipality outline in the origina
 
-
-    #1) Getting Foursquare data as JSON for some municipality
-    #jsonfile = getFSPlaces()
-
-    #2) Extracting topics from texts
-
+    ## 1: Getting data from Foursquare, store it as json and store as shapefile
+  #  jsonfile = getFSPlaces(city = 'Utrecht, NL', section='food', limit=50)
     jsonfile = os.path.join(arcpy.env.workspace,'Utrecht, NLfoodfsdata.json')
-##    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
-##    tname = os.path.join(arcpy.env.workspace,r"result.shp")
+    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
+    resultshp = os.path.join(arcpy.env.workspace,r"result.shp")
 ##    d = loadJson(jsonfile)
-##    json2SHP(d, tname,['cat','rating'],rs)
+##    json2SHP(d, resultshp,['cat','rating'],rs)
+    arcpy.env.extent =  getExtentfromFile(resultshp)
+
+    ## 2: Generating topics from webtexts, store it as json, and as shapefile
     texts,ids = getTexts(jsonfile,'webtext')
     topics = getTopics(texts,ids)
 ##    for id, topic in zip(ids, topics):
 ##        print str(id) +' '+ str(topic)
     outfile = os.path.join(arcpy.env.workspace,'webtexttopics.json')
     addJSON(jsonfile,topics, outfile, ids)
-    rs = arcpy.SpatialReference(28992)    #RD_New, GCS_Amersfoort
 
     tname = os.path.join(arcpy.env.workspace,r"webtopics.shp")
     d = loadJson(outfile)
     topicnames = topics[0].keys()
     keys = ['cat','rating']+ topicnames
     json2SHP(d, tname,keys,rs)
+
+    municipality = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+    buurt = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality)
+    ## 3: Geoprocessing points with topics
+    for t in  normalizeFieldList(topicnames):
+        kdensrast = kdensityRaster(tname, t)
+        #denrast = densityRaster(tname, t)
+        densbuurt = aggRasterinNeighborhoods(kdensrast,buurt) #aggregate means into neighborhoods
+
+
+
+
+
+
 
 
 
