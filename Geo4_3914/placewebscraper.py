@@ -36,34 +36,9 @@ def scrape(url):
             return None
 
 
-    #print page.content
-    #tree = html.fromstring(page.content)
-
     soup = BeautifulSoup(page.content, 'lxml')
 
-   # resultobject['title'] = soup.title.string #soup.prettify()
-
     resultobject['text']=  clean(soup)
-
-    ##divs = soup.find_all("div")
-    ##ps = soup.find_all("p")
-    ##strongs =soup.find_all("strong")
-    ##bs=soup.find_all("b")
-    ##for d in divs:
-    ##    if d.string !=None:
-    ##      print d.bstring
-    ##
-    ##for p in ps:
-    ##    if p.string !=None:
-    ##        print p.string
-    ##
-    ##for b in bs:
-    ##    if b.string !=None:
-    ##        print b.string
-    ##
-    ##for strong in strongs:
-    ##    if strong.string !=None:
-    ##        print strong.string
 
     return resultobject
 
