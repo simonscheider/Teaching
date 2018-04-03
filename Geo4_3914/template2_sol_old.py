@@ -21,32 +21,27 @@ import numbers
 import os
 import string
 import re
-import json
 
-#Libraries that need to be installed from 3rd parties
+#Libraries that need to be installed or from 3rd parties
 import arcpy
 import numpy
+import json, requests
 
-#... for Web scraping
-import requests #This package is for accessing webpages over URLs
-from bs4 import BeautifulSoup #This package scrapes HTML text
+#Web scraping
+from bs4 import BeautifulSoup
 
-#... for NLP
+#NLP
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from nltk.stem.snowball import DutchStemmer
 from nltk import wordpunct_tokenize
 
-#... for ML
+#ML library
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 #This is the LDA Python library for topic modeling
 import lda
-
-#... for plotting and wordclouds
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
-
 
 
 
@@ -55,8 +50,7 @@ from wordcloud import WordCloud
 #   Methods for getting and storing Foursquare data from the web and for web scraping (loading texts from web documents)
 
 """This method obtains Foursquare data (json) from the "explore" endpoint for a city and a thematic section and returns it as a dictionary"""
-def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utrecht, NL', section='food', limit=None):
-    #See: https://developer.foursquare.com/docs/api/venues/explore
+def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utrecht, NL', section='food', limit=50):
 ##        params = dict(
 ##          client_id='VD5JRI5HLXSD21ZJUALG0K4BJOAVJNBIUXUNJDSDHERAYSA0',
 ##          client_secret='J3SNUNCWZ4NCJU1YLP211M4K5ATSBEYRT12VFPNXC4RMYQ5Z',
@@ -64,22 +58,11 @@ def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utre
 ##          section = section,        #The theme
 ##          #query = 'mexican',
 ##          v = '20170801' ,           #The temporal version of data
-##          limit=50                #The upper limit of results that can be get at once (this is always 50)
+##          limit=limit                #The upper limit of results
 ##        )
-        count = 0
-        total = 50
-        venues = []
-        #This gets all results present at Foursquare and up to a limit, if that limit is given as input to the method
-        while  count < total:
-            params['offset'] = count
-            resp = requests.get(url=url, params=params)
-            data = json.loads(resp.text)
-            venues += (data['response']['groups'][0])['items']
-            t = data['response']['totalResults']
-            total =  (t if limit == None else (t if t<limit else limit))
-            count = len(venues)
-        print 'Number of venues obtained for '+city +': '+str(count)
-        return venues
+        resp = requests.get(url=url, params=params)
+        data = json.loads(resp.text)
+        return data
 
 
 """This method takes a web address and scrapes its content via http"""
@@ -124,21 +107,23 @@ def clean(soup):
     return text
 
 
-"""This method processes Foursquare data given as a dictionary (recommendedvenues), enriches it with web texts, and stores it as a jsonfile (outfile).
-It loads
+"""This method processes Foursquare data given as a dictionary (data).
+It gets
 - place name ('Name')
-- a homepage ('url') of a venue (if present), then uses the URL to scrape and enrich with webtexts ('webtext'),
+- a homepage ('url') of a venue (if present), then uses the URL to scrape and enrich with webtexts,
 - user ratings  ('rating')
 - lat lon coordinates,   ('lat', 'lon')
 - place category,  ('cat')
 - menu texts ('menutext')
 - tips.  ('tips')
-Everything is stored in a json file (outfile) with approprate keys, as mentioned above in brackets.
+Everything is stored in a json file given as string (outfile) with approprate keys as mentioned above .
 """
-def processFSPlaces(recommendedvenues, outfile):
+def processFSPlaces(data, outfile):
     out =[]
     #outfile=os.path.join(arcpy.env.workspace, city+section+'fsdata.json')
     with open(outfile, 'w') as fp:
+        recommendedvenues = (data['response']['groups'][0])['items']
+        print data['response']['totalResults']
         for v in recommendedvenues:
             p = {}
             print ''
@@ -206,7 +191,7 @@ def tryKeys(o, k1):
         print 'key error:'+str(e)
         return e
 
-"""Tries to guess the language of a text (this can be used to automate text processing with NLP using the right wordbook)"""
+"""Tries to guess the language of a text"""
 def findLanguage(text):
     languages_ratios = {}
     tokens = wordpunct_tokenize(text)
@@ -230,7 +215,6 @@ def findLanguage(text):
 def loadJson(jsonfile):
      with open(jsonfile) as data:
         dic = json.load(data)
-        data.close()
         return  dic
 
 """A method for writing a dictionary object into a json file"""
@@ -255,9 +239,9 @@ def joinJSON(jsonfile,diclist, outjson, ids = None):
 
 """A method for merging two json files (lists of objects) into a single file"""
 def addJSON(jsonfile1, jsonfile2,outfile):
-    j1 = loadJson(jsonfile1)
-    j2 = loadJson(jsonfile2)
-    writeJson(j1 + j2,outfile)
+##    j1 = loadJson(jsonfile1)
+##    j2 = loadJson(jsonfile2)
+##    writeJson(j1 + j2,outfile)
     return outfile
 
 """Creates an arcpy geometry object from WGS 84 coordinates given in a dictionary"""
@@ -330,7 +314,7 @@ def json2SHP(dictionary, outFC, keylist, rs):
 #   -----------------------------------------------
 #   Methods for processing texts with NLP and LDA
 
-"""Method for extracting a list of texts from a jsonfile using a certain key (if key is not existing, leaves it out, and delivers also an index)"""
+"""Method for extracting a list of texts from a jsonfile using a certain key (if key is not existing, leaves it out, and delivers also an index that points to the location in jsonfile)"""
 def getTexts(jsonfile, key):
     d = loadJson(jsonfile)
     texts = []
@@ -345,23 +329,23 @@ def getTexts(jsonfile, key):
 """ Method turns a given text into tokens removing stopwords and stemming them."""
 def tokenize(text, language = 'dutch'):
 
-##    if language == 'dutch':
-##        p_stemmer = DutchStemmer()
-##    else:
-##        p_stemmer = PorterStemmer()
-##
-##    text = text.lower()
-##    stop = set(stopwords.words(language))
-##    tokens = nltk.word_tokenize(text)
-##    tokens = [i for i in tokens if i not in string.punctuation and len(i)>=3]
+    if language == 'dutch':
+        p_stemmer = DutchStemmer()
+    else:
+        p_stemmer = PorterStemmer()
+
+    text = text.lower()
+    stop = set(stopwords.words(language))
+    tokens = nltk.word_tokenize(text)
+    tokens = [i for i in tokens if i not in string.punctuation and len(i)>=3]
 ##    tokens = [i for i in tokens if i not in stop]  #Removing stopwords
-##    tokens = [i for i in tokens if i.isalpha() and 'www' not in i]    #Removing numbers and alphanumeric characters and www
-##    tokens = [p_stemmer.stem(i) for i in tokens]   #Stemming
+    tokens = [i for i in tokens if i.isalpha()]    #Removing numbers and alphanumeric characters
+    tokens = [p_stemmer.stem(i) for i in tokens]   #Stemming
     return tokens
 
 
 """This method fits an LDA model to a list of texts, prints out most probable words for each topic, and returns topic probabilities for each text (identified by its title)"""
-def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
+def getTopics(texts, titles,language = 'dutch'):
 
     #This is where the texts are turned into a document-term matrix. Also a vectorizer is used to get the list of words used in the model (vocabulary)
 ##    vectorizer = CountVectorizer(min_df = 1, stop_words = stopwords.words(language), analyzer = 'word', tokenizer=tokenize)
@@ -369,32 +353,22 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
 ##    #print(X)
 ##    #Gets the vocabulary of stemmed words (terms)
 ##    vocab = vectorizer.get_feature_names()
-    print(vocab)
-    print('vocabulary size: '+str(len(vocab)))
-    print('Size of document-term matrix:'+str(X.shape))
+##    print(vocab)
 
     #This computes the LDA model
     model = lda.LDA(n_topics=18, n_iter=600, random_state=300)
     model.fit(X)
     topic_word = model.topic_word_
+    #print("type(topic_word): {}".format(type(topic_word)))
     print("shape: {}".format(topic_word.shape))
-    plt.plot(model.loglikelihoods_[5:])
-    plt.show()
 
-    # get the top 10 words for each topic (by probablity)
-    n = 10
+    # get the top 5 words for each topic (by probablity)
+    n = 5
+    c = 0
     for i, topic_dist in enumerate(topic_word):
-        sortedindex = numpy.argsort(topic_dist)
-        topic_words = numpy.array(vocab)[sortedindex][:-(n+1):-1]
-        word_freq = numpy.array(topic_dist)[sortedindex][:-(n+1):-1]
-        frequencies = zip(topic_words, word_freq)
+        topic_words = numpy.array(vocab)[numpy.argsort(topic_dist)][:-(n+1):-1]
         print('*Topic {}\n- {}'.format(i, ' '.join(topic_words)))
-        if showwordcloud:
-            plt.figure()
-            plt.imshow(WordCloud().fit_words(frequencies))
-            plt.axis("off")
-            plt.title("Topic #" + str(i))
-            plt.show()
+        c += 1
     #return model
     # apply topic model to new test data set and write topics into feature vector
     doc_topic_test = model.transform(X)
@@ -403,7 +377,7 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
     result = []
     for title, topics in zip(titles, doc_topic_test):
         title =str(title).encode('utf-8')
-        print("Venue {} (top topic: {})".format(title, topics.argmax()))
+        print("{} (top topic: {})".format(title, topics.argmax()))
         f = {}
         for j,t in enumerate(topics):
                 f['topic '+str(j)]= t
@@ -417,7 +391,7 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
 #   Methods for processing geodata
 
 """This method has a municipality name as input, selects the mun. object in a municipality layer, and stores the single municipality into a shapefile"""
-def getMunicipality(gemname, filen=r"C:\Temp\MTGIS\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM"):
+def getMunicipality(gemname, filen=r"C:\Temp\MTGIS\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM"):
     print ("Getting data for "+gemname)
     out = os.path.join(arcpy.env.workspace, gemname+'.shp')
     arcpy.MakeFeatureLayer_management(filen, 'municipalities_l')
@@ -439,6 +413,14 @@ def kdensityRaster(shapefile, mun, populationfield):
     out = os.path.join(arcpy.env.workspace, mun+'kdr'+populationfield)
 ##    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, 500,"SQUARE_KILOMETERS")
 ##    outKDens.save(out)
+    return out
+
+"""This method generates a point density raster from a shapefile"""
+def densityRaster(shapefile, mun, populationfield):
+    print ("Generate density raster")
+    out = os.path.join(arcpy.env.workspace, mun+'dr'+populationfield)
+##    outDens = arcpy.sa.PointDensity(shapefile, populationfield, "50", arcpy.sa.NbrCircle(500, "MAP"), "SQUARE_KILOMETERS")
+##    outDens.save(out)
     return out
 
 """This method generates a shapefile of city neighborhoods that are within a municipality"""
@@ -476,24 +458,24 @@ def main():
     # 1: Getting data from Foursquare, store it as json and store as shapefile
 
     #First municipality
-    jsonfile1 = os.path.join(arcpy.env.workspace,'Utrechtfoodfsdata.json')
-    municipality1 = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
+    municipality1 = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
     city1 = 'Utrecht, NL'
-    fsdata1 = getFSdata(city=city1, section='food')
+    jsonfile1 = os.path.join(arcpy.env.workspace,'Utrechtfoodfsdata.json')
+    fsdata1 = getFSdata(city=city1, section='food', limit=50)
     processFSPlaces(fsdata1, jsonfile1)
     result1shp = os.path.join(arcpy.env.workspace,"Utrechtfood.shp")
     d = loadJson(jsonfile1)
     json2SHP(d, result1shp,['cat','rating'],rs)
 
     #Second municipality
-    jsonfile2 = os.path.join(arcpy.env.workspace,'Zwollefoodfsdata.json')
-    municipality2 = getMunicipality("Zwolle", filen=r"C:\Temp\MTWEB\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
-    city2 = 'Zwolle, NL'
-    fsdata2 = getFSdata(city=city2, section='food')
-    processFSPlaces(fsdata2, jsonfile2)
-    result2shp = os.path.join(arcpy.env.workspace,"Zwollefood.shp")
-    d = loadJson(jsonfile2)
-    json2SHP(d, result2shp,['cat','rating'],rs)
+##    municipality2 = getMunicipality("Zwolle", filen=r"C:\Temp\MTWEB\wijkenbuurten2017\gem_2017.shp", fieldname = "GM_NAAM")
+##    city2 = 'Zwolle, NL'
+##    jsonfile2 = os.path.join(arcpy.env.workspace,'Zwollefoodfsdata.json')
+##    fsdata2 = getFSdata(city=city2, section='food', limit=50)
+##    processFSPlaces(fsdata1, jsonfile2)
+##    result2shp = os.path.join(arcpy.env.workspace,"Zwollefood.shp")
+##    d = loadJson(jsonfile2)
+##    json2SHP(d, result2shp,['cat','rating'],rs)
 
 
     # 2: Generating topics from webtexts, store it as json, and as shapefile
@@ -501,7 +483,7 @@ def main():
     jsonfile = os.path.join(arcpy.env.workspace,'result.json')
     addJSON(jsonfile1,jsonfile2,jsonfile)                           #This adds the two jsonfiles from two municipalities into a single one
     texts,ids = getTexts(jsonfile,'webtext')                        #This loads the texts contained a certain key
-    topics = getTopics(texts,ids,language = 'dutch', showwordcloud=False)                                   #This method runs LDA to get topic probabilities for each loaded text
+    topics = getTopics(texts,ids)                                   #This method runs LDA to get topic probabilities for each loaded text
     outfile = os.path.join(arcpy.env.workspace,'webtopics.json')
     joinJSON(jsonfile,topics, outfile, ids)                         #This joins the topic probabilities and the json file (for those places having texts)
 
@@ -516,17 +498,19 @@ def main():
 
     #For 1st municipality, generates neighborhood file. Then generates an accessibility raster (density) for each topic and  aggregates it into a neighborhood table
     arcpy.env.extent =  getExtentfromFile(result1shp)
-    buurt1 = getCityNeighborhoods(buurtfile= "wijkenbuurten2014/buurt_2014.shp", within = municipality1)
+    buurt1 = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality1)
     for t in  normalizeFieldList(topicnames):
         kdensrast = kdensityRaster(topicshp, 'U',t)
+        #densrast = densityRaster(topicshp, 'U', t)
         densbuurt = aggRasterinNeighborhoods(kdensrast,buurt1) #aggregate means into neighborhoods
 
     #For 2nd municipality,  generates neighborhood file. Then generates an accessibility raster (density) for each topic and aggregates it into a neighborhood table
-    arcpy.env.extent =  getExtentfromFile(result2shp)
-    buurt2 = getCityNeighborhoods(buurtfile= "wijkenbuurten2014/buurt_2014.shp", within = municipality2)
-    for t in  normalizeFieldList(topicnames):
-        kdensrast = kdensityRaster(topicshp, 'Z',t)
-        densbuurt = aggRasterinNeighborhoods(kdensrast,buurt2) #aggregate means into neighborhoods
+##    arcpy.env.extent =  getExtentfromFile(result2shp)
+##    buurt2 = getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017.shp", within = municipality2)
+##    for t in  normalizeFieldList(topicnames):
+##        kdensrast = kdensityRaster(topicshp, 'Z',t)
+##        #densrast = densityRaster(topicshp, 'U', t)
+##        densbuurt = aggRasterinNeighborhoods(kdensrast,buurt2) #aggregate means into neighborhoods
 
 
 
