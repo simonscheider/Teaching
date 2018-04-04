@@ -9,7 +9,7 @@
 #
 # Author:      Simon Scheider
 #
-# Created:     21/03/2018
+# Created:     03/04/2018
 # Copyright:   (c) simon 2018
 # Licence:     CC BY
 #-------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 
 
-
+##Comments of this format denote missing Python code that you need to produce during the course
 
 
 #   -----------------------------------------------
@@ -57,15 +57,14 @@ from wordcloud import WordCloud
 """This method obtains Foursquare data (json) from the "explore" endpoint for a city and a thematic section and returns it as a dictionary"""
 def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utrecht, NL', section='food', limit=None):
     #See: https://developer.foursquare.com/docs/api/venues/explore
-##        params = dict(
-##          client_id='VD5JRI5HLXSD21ZJUALG0K4BJOAVJNBIUXUNJDSDHERAYSA0',
-##          client_secret='J3SNUNCWZ4NCJU1YLP211M4K5ATSBEYRT12VFPNXC4RMYQ5Z',
-##          near = city,              #the city that is queried
-##          section = section,        #The theme
-##          #query = 'mexican',
-##          v = '20170801' ,           #The temporal version of data
-##          limit=50                #The upper limit of results that can be get at once (this is always 50)
-##        )
+        params = dict(
+          client_id='VD5JRI5HLXSD21ZJUALG0K4BJOAVJNBIUXUNJDSDHERAYSA0',
+          client_secret='J3SNUNCWZ4NCJU1YLP211M4K5ATSBEYRT12VFPNXC4RMYQ5Z',
+          near = city,              #the city that is queried
+          section = section,        #The theme
+          v = '20170801' ,           #The temporal version of data
+          limit=50                #The upper limit of results that can be get at once (this is always 50)
+        )
         count = 0
         total = 50
         venues = []
@@ -86,16 +85,17 @@ def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utre
 def scrape(url):
     resultobject = {}
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-##    try:
-##        page = requests.get(url, headers=headers)
-##    except requests.exceptions.ConnectionError, e:
-##        print("retry")
-##        print e
-##        try:
-##            page = requests.get(url, headers=headers)
-##        except:
-##            print("request of website "+url+' not successful! Skip.')
-##            return None
+    try:
+        page = requests.get(url, headers=headers)
+    except requests.exceptions.ConnectionError, e:
+        print("retry")
+        print e
+        try:
+            page = requests.get(url, headers=headers)
+        except:
+            print("request of website "+url+' not successful! Skip.')
+            return None
+
 
     soup = BeautifulSoup(page.content, 'lxml')
 
@@ -182,13 +182,9 @@ def processFSPlaces(recommendedvenues, outfile):
             tips = tryKeys(v, 'tips')
             if not isinstance(tips, Exception):
                 texts = [t['text'] for t in tips]
-                tt = {}
+                tt = ''
                 for t in texts:
-                    l = findLanguage(t)
-                    if  l in tt.keys():
-                        tt[l]= tt[l]+ '; ' +t
-                    else:
-                        tt[l]= t
+                        tt= tt+ '; ' +t
                 #print 'Tips: '+'| '.join([text+' ('+findLanguage(text)+ ')' for text in texts])
                 p['tips']  = tt
             out.append(p)
@@ -345,18 +341,18 @@ def getTexts(jsonfile, key):
 """ Method turns a given text into tokens removing stopwords and stemming them."""
 def tokenize(text, language = 'dutch'):
 
-##    if language == 'dutch':
-##        p_stemmer = DutchStemmer()
-##    else:
-##        p_stemmer = PorterStemmer()
-##
-##    text = text.lower()
-##    stop = set(stopwords.words(language))
-##    tokens = nltk.word_tokenize(text)
-##    tokens = [i for i in tokens if i not in string.punctuation and len(i)>=3]
-##    tokens = [i for i in tokens if i not in stop]  #Removing stopwords
-##    tokens = [i for i in tokens if i.isalpha() and 'www' not in i]    #Removing numbers and alphanumeric characters and www
-##    tokens = [p_stemmer.stem(i) for i in tokens]   #Stemming
+    if language == 'dutch':
+        p_stemmer = DutchStemmer()
+    else:
+        p_stemmer = PorterStemmer()
+
+    text = text.lower()
+    stop = set(stopwords.words(language))
+    tokens = nltk.word_tokenize(text)
+    tokens = [i for i in tokens if i not in string.punctuation and len(i)>=3]
+    tokens = [i for i in tokens if i not in stop]  #Removing stopwords
+    tokens = [i for i in tokens if i.isalpha() and 'www' not in i]    #Removing numbers and alphanumeric characters and www
+    tokens = [p_stemmer.stem(i) for i in tokens]   #Stemming
     return tokens
 
 
@@ -364,11 +360,10 @@ def tokenize(text, language = 'dutch'):
 def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
 
     #This is where the texts are turned into a document-term matrix. Also a vectorizer is used to get the list of words used in the model (vocabulary)
-##    vectorizer = CountVectorizer(min_df = 1, stop_words = stopwords.words(language), analyzer = 'word', tokenizer=tokenize)
-##    X = vectorizer.fit_transform(texts)
-##    #print(X)
-##    #Gets the vocabulary of stemmed words (terms)
-##    vocab = vectorizer.get_feature_names()
+    vectorizer = CountVectorizer(min_df = 1, stop_words = stopwords.words(language), analyzer = 'word', tokenizer=tokenize)
+    X = vectorizer.fit_transform(texts)
+    #Gets the vocabulary of stemmed words (terms)
+    vocab = vectorizer.get_feature_names()
     print(vocab)
     print('vocabulary size: '+str(len(vocab)))
     print('Size of document-term matrix:'+str(X.shape))
@@ -381,7 +376,7 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
     #plt.plot(model.loglikelihoods_[5:])
     #plt.show()
 
-    # get the top 10 words for each topic (by probablity)
+    # get the top 10 words for each topic and visualize them (by probablity)
     n = 10
     for i, topic_dist in enumerate(topic_word):
         sortedindex = numpy.argsort(topic_dist)
@@ -437,8 +432,8 @@ def getExtentfromFile(filen):
 def kdensityRaster(shapefile, mun, populationfield):
     print ("Generate kernel density raster")
     out = os.path.join(arcpy.env.workspace, mun+'kdr'+populationfield)
-##    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, 500,"SQUARE_KILOMETERS")
-##    outKDens.save(out)
+    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, 500,"SQUARE_KILOMETERS")
+    outKDens.save(out)
     return out
 
 """This method generates a shapefile of city neighborhoods that are within a municipality"""
@@ -454,7 +449,7 @@ def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Ut
 def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
     print ("Aggregate "+raster +" into "+buurt)
     out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
-##    arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
+    arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
     return out
 
 
@@ -473,7 +468,7 @@ def main():
     rs = arcpy.SpatialReference(28992)    #Getting reference system for RD_New, GCS_Amersfoort to project geodata
 
 
-    # 1: Getting data from Foursquare, store it as json and store as shapefile
+    # 1: Getting data from Foursquare, store it as json and  as shapefile
 
     #First municipality
     jsonfile1 = os.path.join(arcpy.env.workspace,'Utrechtfoodfsdata.json')

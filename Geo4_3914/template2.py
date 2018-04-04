@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 
 
-##Comments of this format denote missing Python code that you need to produce during the course
+##Comments of this format denote missing Python code that you need to fill in during the course
 
 
 #   -----------------------------------------------
@@ -57,11 +57,11 @@ from wordcloud import WordCloud
 """This method obtains Foursquare data (json) from the "explore" endpoint for a city and a thematic section and returns it as a dictionary"""
 def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utrecht, NL', section='food', limit=None):
     #See: https://developer.foursquare.com/docs/api/venues/explore
-##          The variable: params (a dictionary) needs to be filled with content by you. It contains the parameters of the API:
-##          params = {}
+##          The variable: params (a dictionary) needs to be filled with content by you. It needs to contains the parameters of the API, including
 ##
-##
-##
+##        params = dict(
+##                       ...
+##                    )
 ##
 ##
 ##
@@ -86,8 +86,8 @@ def getFSdata(url = 'https://api.foursquare.com/v2/venues/explore', city = 'Utre
 def scrape(url):
     resultobject = {}
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-##    Here you need to fill in an http request that gets the HTML of the webpage at the address: url
-##    The variable that needs contain the resulting HTML is: page
+##    Here you need to fill in an http get request that gets the HTML of the webpage at the address: url, using the headers above
+##    The variable that needs to contain the resulting HTML is: page
 ##
 ##
 ##
@@ -182,13 +182,9 @@ def processFSPlaces(recommendedvenues, outfile):
             tips = tryKeys(v, 'tips')
             if not isinstance(tips, Exception):
                 texts = [t['text'] for t in tips]
-                tt = {}
+                tt = ''
                 for t in texts:
-                    l = findLanguage(t)
-                    if  l in tt.keys():
-                        tt[l]= tt[l]+ '; ' +t
-                    else:
-                        tt[l]= t
+                        tt= tt+ '; ' +t
                 #print 'Tips: '+'| '.join([text+' ('+findLanguage(text)+ ')' for text in texts])
                 p['tips']  = tt
             out.append(p)
@@ -345,8 +341,8 @@ def getTexts(jsonfile, key):
 """ Method turns a given text into tokens removing stopwords and stemming them."""
 def tokenize(text, language = 'dutch'):
 
-##   Here you need to fill in details of the tokenizer using a language input, removing stopwords and other unusable stuff
-##   The variable: tokens should contain a list of word tokens from the text input
+##   Here you need to fill in details of the tokenizer using a language input, removing stopwords and punctuation and stemming words
+##   The variable tokens should contain a list of stemmed word tokens from the text input
 ##
 ##
 ##
@@ -364,7 +360,7 @@ def tokenize(text, language = 'dutch'):
 def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
 
     #This is where the texts are turned into a document-term matrix. Also a vectorizer is used to get the list of words used in the model (vocabulary)
-##    Here you need to use a sklearn vectorizer (e.g. CountVectorizer)
+##    Here you need to use a sklearn vectorizer (e.g. CountVectorizer) uwing the texts and the language input variables
 ##    - to produce a document-term matrix (variable X),
 ##    - as well as the vocabulary of words in this matrix (variable vovab)
 ##
@@ -437,7 +433,7 @@ def getExtentfromFile(filen):
 def kdensityRaster(shapefile, mun, populationfield):
     print ("Generate kernel density raster")
     out = os.path.join(arcpy.env.workspace, mun+'kdr'+populationfield)
-##    Here you need to produce a kernel density raster  with arcpy.sa.KernelDensity from the shapefile
+##    Here you need to produce a kernel density raster  with arcpy.sa.KernelDensity, using the shapefile and population field as inputs
 ##
     return out
 
@@ -454,7 +450,7 @@ def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Ut
 def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
     print ("Aggregate "+raster +" into "+buurt)
     out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
-##    Here you need to aggregate the raster into the neighborhoods using arcpy.gp.ZonalStatisticsAsTable_sa
+##    Here you need to aggregate the raster into the neighborhoods (buurt) using arcpy.gp.ZonalStatisticsAsTable_sa
     return out
 
 

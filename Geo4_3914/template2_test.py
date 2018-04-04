@@ -182,13 +182,9 @@ def processFSPlaces(recommendedvenues, outfile):
             tips = tryKeys(v, 'tips')
             if not isinstance(tips, Exception):
                 texts = [t['text'] for t in tips]
-                tt = {}
+                tt = ''
                 for t in texts:
-                    l = findLanguage(t)
-                    if  l in tt.keys():
-                        tt[l]= tt[l]+ '; ' +t
-                    else:
-                        tt[l]= t
+                        tt= tt+ '; ' +t
                 #print 'Tips: '+'| '.join([text+' ('+findLanguage(text)+ ')' for text in texts])
                 p['tips']  = tt
             out.append(p)
@@ -478,21 +474,21 @@ def main():
     jsonfile1 = os.path.join(arcpy.env.workspace,'Utrechtfoodfsdata.json')
     municipality1 = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
     city1 = 'Utrecht, NL'
-    #fsdata1 = getFSdata(city=city1, section='food')
-    #processFSPlaces(fsdata1, jsonfile1)
+    fsdata1 = getFSdata(city=city1, section='food')
+    processFSPlaces(fsdata1, jsonfile1)
     result1shp = os.path.join(arcpy.env.workspace,"Utrechtfood.shp")
-    #d = loadJson(jsonfile1)
-    #json2SHP(d, result1shp,['cat','rating'],rs)
+    d = loadJson(jsonfile1)
+    json2SHP(d, result1shp,['cat','rating'],rs)
 
     #Second municipality
     jsonfile2 = os.path.join(arcpy.env.workspace,'Zwollefoodfsdata.json')
     municipality2 = getMunicipality("Zwolle", filen=r"C:\Temp\MTWEB\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
     city2 = 'Zwolle, NL'
-    #fsdata2 = getFSdata(city=city2, section='food')
-    #processFSPlaces(fsdata2, jsonfile2)
+    fsdata2 = getFSdata(city=city2, section='food')
+    processFSPlaces(fsdata2, jsonfile2)
     result2shp = os.path.join(arcpy.env.workspace,"Zwollefood.shp")
-    #d = loadJson(jsonfile2)
-    #json2SHP(d, result2shp,['cat','rating'],rs)
+    d = loadJson(jsonfile2)
+    json2SHP(d, result2shp,['cat','rating'],rs)
 
 
     # 2: Generating topics from webtexts, store it as json, and as shapefile
