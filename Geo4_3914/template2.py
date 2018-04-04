@@ -374,12 +374,12 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
     print('Size of document-term matrix:'+str(X.shape))
 
     #This computes the LDA model
-    model = lda.LDA(n_topics=18, n_iter=600, random_state=300)
+    model = lda.LDA(n_topics=10, n_iter=600, random_state=300)
     model.fit(X)
     topic_word = model.topic_word_
     print("shape: {}".format(topic_word.shape))
-    plt.plot(model.loglikelihoods_[5:])
-    plt.show()
+    #plt.plot(model.loglikelihoods_[5:])
+    #plt.show()
 
     # get the top 10 words for each topic and visualize them (by probablity)
     n = 10
@@ -387,7 +387,7 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
         sortedindex = numpy.argsort(topic_dist)
         topic_words = numpy.array(vocab)[sortedindex][:-(n+1):-1]
         word_freq = numpy.array(topic_dist)[sortedindex][:-(n+1):-1]
-        frequencies = zip(topic_words, word_freq)
+        frequencies = dict(zip(topic_words, word_freq))
         print('*Topic {}\n- {}'.format(i, ' '.join(topic_words)))
         if showwordcloud:
             plt.figure()
@@ -445,9 +445,9 @@ def kdensityRaster(shapefile, mun, populationfield):
 def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Utrecht.shp'):
     print ("Get city neighorhoods for "+within)
     out = os.path.join(arcpy.env.workspace, within.split('.')[0]+'buurten.shp')
-##    Here you need to produce a city neighborhood file for a given municipality, using the Select by Location method
-##
-##
+    arcpy.MakeFeatureLayer_management(buurtfile, 'buurtenSourcel')
+    arcpy.SelectLayerByLocation_management('buurtenSourcel', 'WITHIN', within)
+    arcpy.CopyFeatures_management('buurtenSourcel', out)
     return out
 
 """This method aggregates a raster into a neighborhood shapefile using a Zonal mean, and stores it as a table"""

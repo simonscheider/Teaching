@@ -345,18 +345,18 @@ def getTexts(jsonfile, key):
 """ Method turns a given text into tokens removing stopwords and stemming them."""
 def tokenize(text, language = 'dutch'):
 
-##   Here you need to fill in details of the tokenizer using a language input, removing stopwords and other unusable stuff
-##   The variable: tokens should contain a list of word tokens from the text input
-##
-##
-##
-##
-##
-##
-##
-##
-##
-##
+    if language == 'dutch':
+        p_stemmer = DutchStemmer()
+    else:
+        p_stemmer = PorterStemmer()
+
+    text = text.lower()
+    stop = set(stopwords.words(language))
+    tokens = nltk.word_tokenize(text)
+    tokens = [i for i in tokens if i not in string.punctuation and len(i)>=3]
+    tokens = [i for i in tokens if i not in stop]  #Removing stopwords
+    tokens = [i for i in tokens if i.isalpha() and 'www' not in i]    #Removing numbers and alphanumeric characters and www
+    tokens = [p_stemmer.stem(i) for i in tokens]   #Stemming
     return tokens
 
 
@@ -364,22 +364,21 @@ def tokenize(text, language = 'dutch'):
 def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
 
     #This is where the texts are turned into a document-term matrix. Also a vectorizer is used to get the list of words used in the model (vocabulary)
-##    Here you need to use a sklearn vectorizer (e.g. CountVectorizer)
-##    - to produce a document-term matrix (variable X),
-##    - as well as the vocabulary of words in this matrix (variable vovab)
-##
-##
+    vectorizer = CountVectorizer(min_df = 1, stop_words = stopwords.words(language), analyzer = 'word', tokenizer=tokenize)
+    X = vectorizer.fit_transform(texts)
+    #Gets the vocabulary of stemmed words (terms)
+    vocab = vectorizer.get_feature_names()
     print(vocab)
     print('vocabulary size: '+str(len(vocab)))
     print('Size of document-term matrix:'+str(X.shape))
 
     #This computes the LDA model
-    model = lda.LDA(n_topics=18, n_iter=600, random_state=300)
+    model = lda.LDA(n_topics=10, n_iter=600, random_state=300)
     model.fit(X)
     topic_word = model.topic_word_
     print("shape: {}".format(topic_word.shape))
-    plt.plot(model.loglikelihoods_[5:])
-    plt.show()
+    #plt.plot(model.loglikelihoods_[5:])
+    #plt.show()
 
     # get the top 10 words for each topic and visualize them (by probablity)
     n = 10
@@ -387,7 +386,7 @@ def getTopics(texts, titles,language = 'dutch', showwordcloud = False):
         sortedindex = numpy.argsort(topic_dist)
         topic_words = numpy.array(vocab)[sortedindex][:-(n+1):-1]
         word_freq = numpy.array(topic_dist)[sortedindex][:-(n+1):-1]
-        frequencies = zip(topic_words, word_freq)
+        frequencies = dict(zip(topic_words, word_freq))
         print('*Topic {}\n- {}'.format(i, ' '.join(topic_words)))
         if showwordcloud:
             plt.figure()
@@ -437,24 +436,24 @@ def getExtentfromFile(filen):
 def kdensityRaster(shapefile, mun, populationfield):
     print ("Generate kernel density raster")
     out = os.path.join(arcpy.env.workspace, mun+'kdr'+populationfield)
-##    Here you need to produce a kernel density raster  with arcpy.sa.KernelDensity from the shapefile
-##
+    outKDens = arcpy.sa.KernelDensity(shapefile, populationfield, 50, 500,"SQUARE_KILOMETERS")
+    outKDens.save(out)
     return out
 
 """This method generates a shapefile of city neighborhoods that are within a municipality"""
 def getCityNeighborhoods(buurtfile= "wijkenbuurten2017/buurt_2017", within = 'Utrecht.shp'):
     print ("Get city neighorhoods for "+within)
     out = os.path.join(arcpy.env.workspace, within.split('.')[0]+'buurten.shp')
-##    Here you need to produce a city neighborhood file for a given municipality, using the Select by Location method
-##
-##
+    arcpy.MakeFeatureLayer_management(buurtfile, 'buurtenSourcel')
+    arcpy.SelectLayerByLocation_management('buurtenSourcel', 'WITHIN', within)
+    arcpy.CopyFeatures_management('buurtenSourcel', out)
     return out
 
 """This method aggregates a raster into a neighborhood shapefile using a Zonal mean, and stores it as a table"""
 def aggRasterinNeighborhoods(raster, buurt = "buurten.shp"):
     print ("Aggregate "+raster +" into "+buurt)
     out = os.path.join(arcpy.env.workspace, os.path.splitext(os.path.basename(raster))[0]+'b.dbf')
-##    Here you need to aggregate the raster into the neighborhoods using arcpy.gp.ZonalStatisticsAsTable_sa
+    arcpy.gp.ZonalStatisticsAsTable_sa(buurt, "BU_CODE", raster, out, "DATA", "MEAN")
     return out
 
 
@@ -479,21 +478,21 @@ def main():
     jsonfile1 = os.path.join(arcpy.env.workspace,'Utrechtfoodfsdata.json')
     municipality1 = getMunicipality("Utrecht", filen=r"C:\Temp\MTWEB\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
     city1 = 'Utrecht, NL'
-    fsdata1 = getFSdata(city=city1, section='food')
-    processFSPlaces(fsdata1, jsonfile1)
+    #fsdata1 = getFSdata(city=city1, section='food')
+    #processFSPlaces(fsdata1, jsonfile1)
     result1shp = os.path.join(arcpy.env.workspace,"Utrechtfood.shp")
-    d = loadJson(jsonfile1)
-    json2SHP(d, result1shp,['cat','rating'],rs)
+    #d = loadJson(jsonfile1)
+    #json2SHP(d, result1shp,['cat','rating'],rs)
 
     #Second municipality
     jsonfile2 = os.path.join(arcpy.env.workspace,'Zwollefoodfsdata.json')
     municipality2 = getMunicipality("Zwolle", filen=r"C:\Temp\MTWEB\wijkenbuurten2014\gem_2014.shp", fieldname = "GM_NAAM")
     city2 = 'Zwolle, NL'
-    fsdata2 = getFSdata(city=city2, section='food')
-    processFSPlaces(fsdata2, jsonfile2)
+    #fsdata2 = getFSdata(city=city2, section='food')
+    #processFSPlaces(fsdata2, jsonfile2)
     result2shp = os.path.join(arcpy.env.workspace,"Zwollefood.shp")
-    d = loadJson(jsonfile2)
-    json2SHP(d, result2shp,['cat','rating'],rs)
+    #d = loadJson(jsonfile2)
+    #json2SHP(d, result2shp,['cat','rating'],rs)
 
 
     # 2: Generating topics from webtexts, store it as json, and as shapefile
